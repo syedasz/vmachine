@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vending Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .center-buttons {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .center-buttons button {
+            margin: 5px;
+        }
+    </style>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            loadBrands();
+            updateCoinSummary();
+        });
+
+        function loadBrands() {
+            let brands = JSON.parse(localStorage.getItem("brands")) || [];
+            let container = document.getElementById("brand-list");
+            container.innerHTML = "";
+
+            brands.forEach((brand, index) => {
+                container.innerHTML += `
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+
+                        </div>
+                        <div class="col-md-3">
+                            <input type="text" class="form-control" id="name-${index}" value="${brand.name}" placeholder="Product Name">
+                        </div>
+                        <div class="col-md-2">
+                            <input type="number" class="form-control" id="price-${index}" value="${brand.price}" step="0.01" placeholder="Price">
+                        </div>
+                        <div class="col-md-2">
+                            <input type="number" class="form-control" id="stock-${index}" value="${brand.stock}" placeholder="Stock" min="0" max="20">
+                        </div>
+                        <div class="col-md-3">
+                            <input type="text" class="form-control" id="image-${index}" value="${brand.image}" placeholder="Image URL">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-danger" onclick="deleteBrand(${index})">Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function addBrand() {
+            let brands = JSON.parse(localStorage.getItem("brands")) || [];
+            brands.push({ name: "", price: 0, stock: 0, image: "" });
+            localStorage.setItem("brands", JSON.stringify(brands));
+            loadBrands();
+        }
+
+        function saveBrands() {
+            let brands = [];
+            let inputs = document.querySelectorAll("[id^='name-']");
+            inputs.forEach((input, index) => {
+                let stockValue = parseInt(document.getElementById(`stock-${index}`).value);
+                if (stockValue < 0 || stockValue > 20) {
+                    alert("Stock must be between 0 and 20.");
+                    return;
+                }
+                brands.push({
+                    name: document.getElementById(`name-${index}`).value,
+                    price: parseFloat(document.getElementById(`price-${index}`).value),
+                    stock: stockValue,
+                    image: document.getElementById(`image-${index}`).value
+                });
+            });
+            localStorage.setItem("brands", JSON.stringify(brands));
+            syncStock();
+            alert("Products saved!");
+            notifyIndexStockUpdate();
+        }
+
+        function syncStock() {
+            let brands = JSON.parse(localStorage.getItem("brands")) || [];
+            let stock = {};
+            brands.forEach(brand => {
+                stock[brand.name] = brand.stock;
+            });
+            localStorage.setItem("stock", JSON.stringify(stock));
+        }
+
+        function notifyIndexStockUpdate() {
+            if (window.opener) {
+                window.opener.postMessage({ action: "updateStock" }, "*");
+            }
+        }
+
+        function deleteBrand(index) {
+            let brands = JSON.parse(localStorage.getItem("brands")) || [];
+            brands.splice(index, 1);
+            localStorage.setItem("brands", JSON.stringify(brands));
+            loadBrands();
+        }
+
+        function updateCoinSummary() {
+            let totalCoins = JSON.parse(localStorage.getItem("coinsInserted")) || 0;
+            let breakdown = JSON.parse(localStorage.getItem("coinCount")) || { "0.10": 0, "0.20": 0, "0.50": 0, "1.00": 0 };
+
+            document.getElementById("total-coins").innerText = totalCoins.toFixed(2);
+            document.getElementById("coin-10c").innerText = breakdown["0.10"];
+            document.getElementById("coin-20c").innerText = breakdown["0.20"];
+            document.getElementById("coin-50c").innerText = breakdown["0.50"];
+            document.getElementById("coin-rm1").innerText = breakdown["1.00"];
+        }
+
+        function insertCoin(amount) {
+            let coins = JSON.parse(localStorage.getItem("coinsInserted")) || 0;
+            let coinBreakdown = JSON.parse(localStorage.getItem("coinCount")) || { "0.10": 0, "0.20": 0, "0.50": 0, "1.00": 0 };
+
+            coins += amount;
+            coinBreakdown[amount.toFixed(2)] += 1;
+
+            localStorage.setItem("coinsInserted", JSON.stringify(coins));
+            localStorage.setItem("coinCount", JSON.stringify(coinBreakdown));
+
+            updateCoinSummary();
+            notifyIndex();
+        }
+
+        function invalidCoin() {
+            alert("Invalid coin inserted! This coin is not accepted.");
+        }
+
+        function collectCoins() {
+            let totalCoins = JSON.parse(localStorage.getItem("coinsInserted")) || 0;
+            alert(`Collected coins: RM${totalCoins.toFixed(2)}`);
+
+            // Reset inserted coins to 0
+            localStorage.setItem("coinsInserted", JSON.stringify(0));
+            localStorage.setItem("coinCount", JSON.stringify({ "0.10": 0, "0.20": 0, "0.50": 0, "1.00": 0 }));
+
+            updateCoinSummary();
+            notifyIndex();
+        }
+
+        function notifyIndex() {
+            if (window.opener) {
+                window.opener.postMessage({ action: "resetCoins" }, "*");
+            }
+        }
+
+        window.addEventListener("message", (event) => {
+            if (event.data.action === "resetCoins") {
+                updateCoinSummary();
+            }
+        });
+    </script>
+</head>
+<body class="container mt-5">
+    <h1 class="text-center">Vending Management</h1>
+
+    <div class="center-buttons">
+        <button class="btn btn-secondary" onclick="insertCoin(0.10)">10c</button>
+        <button class="btn btn-secondary" onclick="insertCoin(0.20)">20c</button>
+        <button class="btn btn-secondary" onclick="insertCoin(0.50)">50c</button>
+        <button class="btn btn-secondary" onclick="insertCoin(1.00)">RM1</button>
+    </div>
+
+    <h3 class="mt-3">Total Coins Inserted: RM <span id="total-coins">0.00</span></h3>
+    <h4>Coin Breakdown:</h4>
+    <p>10c: <span id="coin-10c">0</span>, 20c: <span id="coin-20c">0</span>, 50c: <span id="coin-50c">0</span>, RM1: <span id="coin-rm1">0</span></p>
+
+    <div class="center-buttons">
+        <button class="btn btn-warning mt-3" onclick="collectCoins()">Collect Coins</button>
+    </div>
+
+    <div class="left-buttons">
+        <button class="btn btn-primary mb-3" onclick="addBrand()">Add New Product</button>
+    </div>
+    <div id="brand-list"></div>
+    <div class="center-buttons">
+        <button class="btn btn-success mt-3" onclick="saveBrands()">Save Products</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

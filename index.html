@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VMCS - User Page</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script>
+        let balance = 0;
+        let stock = JSON.parse(localStorage.getItem("stock")) || {};
+        let coinsInserted = JSON.parse(localStorage.getItem("coinsInserted")) || 0;
+        let coinCount = JSON.parse(localStorage.getItem("coinCount")) || { "0.10": 0, "0.20": 0, "0.50": 0, "1.00": 0 };
+
+        document.addEventListener("DOMContentLoaded", function () {
+            checkMaintenance();
+            loadBrands();
+            updateCoinSummary();
+        });
+
+        function checkMaintenance() {
+            let maintenance = localStorage.getItem("maintenance") === "true";
+            if (maintenance) {
+                alert("System is under maintenance!");
+                window.location.href = "maintainer.html";
+            }
+        }
+
+        function loadBrands() {
+            let brands = JSON.parse(localStorage.getItem("brands")) || [];
+            let container = document.getElementById("product-list");
+            container.innerHTML = brands.length ? "" : "<p class='text-center'>No products available.</p>";
+
+            brands.forEach((brand) => {
+                if (stock[brand.name] === undefined) {
+                    stock[brand.name] = brand.stock || 10; // Default stock to 10 if undefined
+                }
+
+                container.innerHTML += `
+                    <div class="col-md-4 text-center">
+                        <h3>${brand.name || "New Product"}</h3>
+                        <img src="${brand.image}" class="product-img" alt="${brand.name}">
+                        <p>Stock: <span id="stock-${brand.name}">${stock[brand.name]}</span></p>
+                        <button class="btn btn-success d-block mx-auto mt-2" onclick="purchase(${brand.price}, '${brand.name}')">
+                            Buy ${brand.name} ($${brand.price.toFixed(2)})
+                        </button>
+                    </div>
+                `;
+            });
+
+            localStorage.setItem("stock", JSON.stringify(stock)); // Save initialized stock
+        }
+
+        function insertCoin(amount) {
+            balance += amount;
+            coinsInserted += amount;
+            coinCount[amount.toFixed(2)] = (coinCount[amount.toFixed(2)] || 0) + 1;
+
+            localStorage.setItem("coinsInserted", JSON.stringify(coinsInserted));
+            localStorage.setItem("coinCount", JSON.stringify(coinCount));
+
+            updateDisplay();
+        }
+
+        function slashCoin() {
+            alert("Invalid coin inserted! This coin is not accepted.");
+        }
+
+        function dispenseCoins() {
+            alert(`Dispensed coins: $${coinsInserted.toFixed(2)}`);
+            coinsInserted = 0;
+            coinCount = { "0.10": 0, "0.20": 0, "0.50": 0, "1.00": 0 };
+
+            localStorage.setItem("coinsInserted", JSON.stringify(coinsInserted));
+            localStorage.setItem("coinCount", JSON.stringify(coinCount));
+
+            updateDisplay();
+        }
+
+        function purchase(price, product) {
+            if ((stock[product] || 0) > 0) {
+                if (balance >= price) {
+                    let change = balance - price;
+                    balance = 0;
+                    stock[product]--;
+                    localStorage.setItem("stock", JSON.stringify(stock));
+                    alert(`Dispensed: ${product}\nChange: $${change.toFixed(2)}`);
+                    updateDisplay();
+                } else {
+                    alert("Insufficient funds! Insert more coins.");
+                }
+            } else {
+                alert("Out of stock!");
+            }
+        }
+
+        function updateDisplay() {
+            document.getElementById("balance").innerText = `Balance: $${balance.toFixed(2)}`;
+            document.getElementById("total-inserted").innerText = `Total Inserted: $${coinsInserted.toFixed(2)}`;
+
+            let breakdown = document.getElementById("coin-breakdown");
+            breakdown.innerHTML = `
+                <p>0.10: ${coinCount["0.10"]} times</p>
+                <p>0.20: ${coinCount["0.20"]} times</p>
+                <p>0.50: ${coinCount["0.50"]} times</p>
+                <p>1.00: ${coinCount["1.00"]} times</p>
+            `;
+        }
+
+        window.addEventListener("message", (event) => {
+            if (event.data.action === "resetCoins") {
+                coinsInserted = 0;
+                coinCount = { "0.10": 0, "0.20": 0, "0.50": 0, "1.00": 0 };
+
+                localStorage.setItem("coinsInserted", JSON.stringify(0));
+                localStorage.setItem("coinCount", JSON.stringify(coinCount));
+
+                updateDisplay();
+            }
+        });
+
+        window.addEventListener("message", (event) => {
+            if (event.data.action === "updateStock") {
+                loadBrands();
+            }
+        });
+
+        function collectCoins() {
+            let balance = JSON.parse(localStorage.getItem("balance")) || 0;
+            alert(`Collected RM ${balance.toFixed(2)} from purchases`);
+
+            // Reset only spent coins
+            localStorage.setItem("coinsInserted", JSON.stringify(balance));
+            localStorage.setItem("coinCount", JSON.stringify({ "0.10": 0, "0.20": 0, "0.50": 0, "1.00": 0 }));
+
+            updateCoinSummary();
+            notifyIndex();
+        }
+    </script>
+    <style>
+        .product-img { width: 100px; height: auto; }
+    </style>
+</head>
+<body class="container mt-5">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">VMCS</a>
+            <div class="dropdown ms-auto">
+                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Menu
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="login.html">Login</a></li>
+                    <li><a class="dropdown-item" href="maintainer.html">Maintainer</a></li>
+                    <li><a class="dropdown-item" href="vending.html">Vending</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <h1 class="text-center">Vending Machine</h1>
+    <h2 id="balance" class="text-center">Balance: $0.00</h2>
+    <h3 id="total-inserted" class="text-center">Total Inserted: $0.00</h3>
+
+    <div class="text-center">
+        <button class="btn btn-primary m-2" onclick="insertCoin(0.10)">$0.10</button>
+        <button class="btn btn-primary m-2" onclick="insertCoin(0.20)">$0.20</button>
+        <button class="btn btn-primary m-2" onclick="insertCoin(0.50)">$0.50</button>
+        <button class="btn btn-primary m-2" onclick="insertCoin(1.00)">$1.00</button>
+        <button class="btn btn-danger m-2" onclick="slashCoin()">Slash (Invalid Coin)</button>
+    </div>
+
+    <div class="text-center mt-4">
+        <h3>Coin Insertion Breakdown</h3>
+        <div id="coin-breakdown"></div>
+    </div>
+
+    <div class="row text-center mt-4" id="product-list"></div>
+
+    <div class="text-center mt-4">
+        <button class="btn btn-warning" onclick="dispenseCoins()">Dispense Coins</button>
+    </div>
+    
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
